@@ -6,13 +6,17 @@ import threading
 
 from django.conf import settings
 from django.contrib import admin
+from django.db import connection
 from django.db import models, router
 from django.db.models.fields.proxy import OrderWrt
+from django.db.utils import ProgrammingError
 from django.utils import six
 from django.utils.encoding import python_2_unicode_compatible, smart_text
 from django.utils.timezone import now
 from django.utils.translation import string_concat, ugettext_lazy as _
 
+from .constants.db_to_django_mapping import DJANGO_TYPE_MAPPING
+from .constants.type_code_mapping import TYPE_CODE_MAPPING
 from . import exceptions
 from .manager import HistoryDescriptor
 
@@ -131,7 +135,12 @@ class HistoricalRecords(object):
 
         attrs.update(fields)
         attrs.update(self.get_extra_fields(model, fields))
-        missing_fields = self.add_missing_fields(model._meta.app_label, name, attrs)
+        missing_fields = []
+        try:
+            missing_fields = self.add_missing_fields(model._meta.app_label, name, attrs)
+        except ProgrammingError:
+            pass
+
         attrs.update(missing_fields)
         # type in python2 wants str as a first argument
         attrs.update(Meta=type(str('Meta'), (), self.get_meta_options(model)))
@@ -204,7 +213,7 @@ class HistoricalRecords(object):
         return fields
 
     def add_missing_fields(self, module_name, model_name, fields):
-        from django.db import connection
+
         db_name = '%s_%s' % (module_name.split('.')[-1], model_name.lower())
         cursor = connection.cursor()
         query = 'select * from %s' % db_name
@@ -212,7 +221,7 @@ class HistoricalRecords(object):
         db_field_list = cursor.description
         missing_fields = []
         for field in db_field_list:
-            if field.name not in fields:
+            if field[0] not in fields:
                 missing_fields.append(field)
         return self.map_missing_fields_to_django(missing_fields)
 
@@ -220,19 +229,18 @@ class HistoricalRecords(object):
         mapped_fields = {}
         for field in missing_fields:
             # TODO: handle it in a better way
-            if field.name == 'history_user_id' or field.name.endswith('_id'):
+            name = field[0]
+            if name == 'history_user_id' or name.endswith('_id'):
                 continue
-            mapped_fields[field.name] = self.get_field_type_by_id(field)
+            mapped_fields[name] = self.get_field_type_by_id(field)
         return mapped_fields
 
     def get_field_type_by_id(self, field):
-        from simple_history.constants.type_code_mapping import TYPE_CODE_MAPPING
-        from simple_history.constants.db_to_django_mapping import DJANGO_TYPE_MAPPING
-
-        db_type_name = TYPE_CODE_MAPPING[field.type_code]
+        type_code = field[1]
+        db_type_name = TYPE_CODE_MAPPING[type_code]
         django_type = DJANGO_TYPE_MAPPING[db_type_name]
-        if field.internal_size:
-            return django_type(max_length=field.internal_size, blank=True, null=True)
+        if django_type == models.CharField:
+            return django_type(max_length=field[4], blank=True, null=True)
         return django_type(blank=True, null=True)
 
     def get_extra_fields(self, model, fields):

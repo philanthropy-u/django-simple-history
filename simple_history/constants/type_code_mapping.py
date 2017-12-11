@@ -3,8 +3,9 @@ TYPE_CODE_MAPPING = {
     4: 'float',
     10: 'date',
     12: 'datetime',
-    9: 'int'
-
-
-
+    9: 'int',
+    252: 'longtext',
+    253: 'varchar',
+    3: 'bigint',
+    1: 'bool'
 }

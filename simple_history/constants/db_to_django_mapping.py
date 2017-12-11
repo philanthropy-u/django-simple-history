@@ -2,7 +2,7 @@ from django.db import models
 
 DJANGO_TYPE_MAPPING = {
     'varchar': models.CharField,
-    'bool': models.BooleanField,
+    'bool': models.NullBooleanField,
     'date': models.DateField,
     'datetime': models.DateTimeField,
     'double precision': models.FloatField,
