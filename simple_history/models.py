@@ -28,7 +28,6 @@ else:  # south configuration for CustomForeignKeyField
     add_introspection_rules(
         [], ["^simple_history.models.CustomForeignKeyField"])
 
-
 registered_models = {}
 
 
@@ -72,6 +71,7 @@ class HistoricalRecords(object):
             finally:
                 del self.skip_history_when_saving
             return ret
+
         setattr(cls, 'save_without_historical_record',
                 save_without_historical_record)
 
@@ -127,13 +127,17 @@ class HistoricalRecords(object):
             attrs['__module__'] = models_module
 
         fields = self.copy_fields(model)
+        name = 'Historical%s' % model._meta.object_name
+
         attrs.update(fields)
         attrs.update(self.get_extra_fields(model, fields))
+        missing_fields = self.add_missing_fields(model._meta.app_label, name, attrs)
+        attrs.update(missing_fields)
         # type in python2 wants str as a first argument
         attrs.update(Meta=type(str('Meta'), (), self.get_meta_options(model)))
         if self.table_name is not None:
             attrs['Meta'].db_table = self.table_name
-        name = 'Historical%s' % model._meta.object_name
+
         registered_models[model._meta.db_table] = model
         return python_2_unicode_compatible(
             type(str(name), self.bases, attrs))
@@ -199,6 +203,38 @@ class HistoricalRecords(object):
             fields[field.name] = field
         return fields
 
+    def add_missing_fields(self, module_name, model_name, fields):
+        from django.db import connection
+        db_name = '%s_%s' % (module_name.split('.')[-1], model_name.lower())
+        cursor = connection.cursor()
+        query = 'select * from %s' % db_name
+        cursor.execute(query)
+        db_field_list = cursor.description
+        missing_fields = []
+        for field in db_field_list:
+            if field.name not in fields:
+                missing_fields.append(field)
+        return self.map_missing_fields_to_django(missing_fields)
+
+    def map_missing_fields_to_django(self, missing_fields):
+        mapped_fields = {}
+        for field in missing_fields:
+            # TODO: handle it in a better way
+            if field.name == 'history_user_id' or field.name.endswith('_id'):
+                continue
+            mapped_fields[field.name] = self.get_field_type_by_id(field)
+        return mapped_fields
+
+    def get_field_type_by_id(self, field):
+        from simple_history.constants.type_code_mapping import TYPE_CODE_MAPPING
+        from simple_history.constants.db_to_django_mapping import DJANGO_TYPE_MAPPING
+
+        db_type_name = TYPE_CODE_MAPPING[field.type_code]
+        django_type = DJANGO_TYPE_MAPPING[db_type_name]
+        if field.internal_size:
+            return django_type(max_length=field.internal_size, blank=True, null=True)
+        return django_type(blank=True, null=True)
+
     def get_extra_fields(self, model, fields):
         """Return dict of extra fields added to the historical record model"""
 
@@ -222,6 +258,8 @@ class HistoricalRecords(object):
         return {
             'history_id': models.AutoField(primary_key=True),
             'history_date': models.DateTimeField(),
+            'start_date': models.DateTimeField(null=True, blank=True),
+            'end_date': models.DateTimeField(null=True, blank=True),
             'history_change_reason': models.CharField(max_length=100,
                                                       null=True),
             'history_user': models.ForeignKey(
@@ -272,11 +310,18 @@ class HistoricalRecords(object):
         history_change_reason = getattr(instance, 'changeReason', None)
         manager = getattr(instance, self.manager_name)
         attrs = {}
+        self.update_last_history(manager)
         for field in self.fields_included(instance):
             attrs[field.attname] = getattr(instance, field.attname)
         manager.create(history_date=history_date, history_type=history_type,
                        history_user=history_user,
+                       start_date=now(),
                        history_change_reason=history_change_reason, **attrs)
+
+    def update_last_history(self, manager):
+        instance = manager.model.objects.latest()
+        instance.end_date = now()
+        instance.save()
 
     def get_history_user(self, instance):
         """Get the modifying user from instance or middleware."""
