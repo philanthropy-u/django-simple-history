@@ -327,9 +327,12 @@ class HistoricalRecords(object):
                        history_change_reason=history_change_reason, **attrs)
 
     def update_last_history(self, manager):
-        instance = manager.model.objects.latest()
-        instance.end_date = now()
-        instance.save()
+        try:
+            instance = manager.model.objects.latest()
+            instance.end_date = now()
+            instance.save()
+        except manager.model.DoesNotExist:
+            pass
 
     def get_history_user(self, instance):
         """Get the modifying user from instance or middleware."""
