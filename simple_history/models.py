@@ -240,7 +240,7 @@ class HistoricalRecords(object):
         db_type_name = TYPE_CODE_MAPPING[type_code]
         django_type = DJANGO_TYPE_MAPPING[db_type_name]
         if django_type == models.CharField:
-            return django_type(max_length=field[4], blank=True, null=True)
+            return django_type(max_length=255, blank=True, null=True)
         return django_type(blank=True, null=True)
 
     def get_extra_fields(self, model, fields):
