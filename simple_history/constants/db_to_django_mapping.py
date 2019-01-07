@@ -7,6 +7,7 @@ DJANGO_TYPE_MAPPING = {
     'datetime': models.DateTimeField,
     'double precision': models.FloatField,
     'integer': models.IntegerField,
+    'int': models.IntegerField,
     'bigint': models.BigIntegerField,
     'longtext': models.TextField,
     'time': models.TimeField,
