@@ -1,5 +1,6 @@
 from __future__ import unicode_literals
 
+import re
 import copy
 import importlib
 import threading
@@ -16,7 +17,6 @@ from django.utils.timezone import now
 from django.utils.translation import string_concat, ugettext_lazy as _
 
 from .constants.db_to_django_mapping import DJANGO_TYPE_MAPPING
-from .constants.type_code_mapping import TYPE_CODE_MAPPING
 from . import exceptions
 from .manager import HistoryDescriptor
 
@@ -213,16 +213,16 @@ class HistoricalRecords(object):
         return fields
 
     def add_missing_fields(self, module_name, model_name, fields):
-
-        db_name = '%s_%s' % (module_name.split('.')[-1], model_name.lower())
-        cursor = connection.cursor()
-        query = 'select * from %s' % db_name
-        cursor.execute(query)
-        db_field_list = cursor.description
         missing_fields = []
-        for field in db_field_list:
+        cursor = connection.cursor()
+        db_name = '%s_%s' % (module_name.split('.')[-1], model_name.lower())
+        query = 'describe %s;' % db_name
+        cursor.execute(query)
+
+        for field in cursor:
             if field[0] not in fields:
                 missing_fields.append(field)
+
         return self.map_missing_fields_to_django(missing_fields)
 
     def map_missing_fields_to_django(self, missing_fields):
@@ -236,11 +236,13 @@ class HistoricalRecords(object):
         return mapped_fields
 
     def get_field_type_by_id(self, field):
-        type_code = field[1]
-        db_type_name = TYPE_CODE_MAPPING[type_code]
+        # Regex to remove length given in brackets in the field type
+        db_type_name = re.sub('\(.+\)', '', field[1]).lower()
         django_type = DJANGO_TYPE_MAPPING[db_type_name]
+
         if django_type == models.CharField:
             return django_type(max_length=255, blank=True, null=True)
+
         return django_type(blank=True, null=True)
 
     def get_extra_fields(self, model, fields):
