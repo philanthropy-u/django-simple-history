@@ -214,14 +214,15 @@ class HistoricalRecords(object):
 
     def add_missing_fields(self, module_name, model_name, fields):
         missing_fields = []
-        cursor = connection.cursor()
-        db_name = '%s_%s' % (module_name.split('.')[-1], model_name.lower())
-        query = 'describe %s;' % db_name
-        cursor.execute(query)
 
-        for field in cursor:
-            if field[0] not in fields:
-                missing_fields.append(field)
+        with connection.cursor() as cursor:
+            db_name = '%s_%s' % (module_name.split('.')[-1], model_name.lower())
+            query = 'describe %s;' % db_name
+            cursor.execute(query)
+
+            for field in cursor:
+                if field[0] not in fields:
+                    missing_fields.append(field)
 
         return self.map_missing_fields_to_django(missing_fields)
 
