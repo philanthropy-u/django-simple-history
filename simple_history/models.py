@@ -222,7 +222,10 @@ class HistoricalRecords(object):
             for field in cursor:
                 if field[0] not in fields:
                     missing_fields.append(field)
-
+        # this is a persistent connection we've to close it manually because
+        # this connection is made at server's start up time so CONN_MAX_AGE
+        # isn't working with this connection
+        connection.close()
         return self.map_missing_fields_to_django(missing_fields)
 
     def map_missing_fields_to_django(self, missing_fields):
