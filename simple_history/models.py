@@ -7,7 +7,6 @@ import threading
 
 from django.conf import settings
 from django.contrib import admin
-from django.db import connection
 from django.db import models, router
 from django.db.models.fields.proxy import OrderWrt
 from django.db.utils import ProgrammingError
@@ -214,7 +213,7 @@ class HistoricalRecords(object):
 
     def add_missing_fields(self, module_name, model_name, fields):
         missing_fields = []
-
+        from django.db import connection
         with connection.cursor() as cursor:
             db_name = '%s_%s' % (module_name.split('.')[-1], model_name.lower())
             query = 'describe %s;' % db_name
